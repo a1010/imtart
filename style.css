@@ -39,6 +39,10 @@ header p {
     margin-top: 10px;
     font-size: 16px;
     color: #d16e6c;
+    /* Rounded, cute handwritten-like font for captions */
+    font-family: 'M PLUS Rounded 1c', 'Kosugi Maru', 'Helvetica Neue', sans-serif;
+    font-weight: 700;
+    letter-spacing: 0.4px;
 }
 footer {
     background-color: #fff;
