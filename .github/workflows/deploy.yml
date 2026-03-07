@@ -25,7 +25,6 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
-          cache: npm
           registry-url: ${{ vars.NPM_REGISTRY_URL != '' && vars.NPM_REGISTRY_URL || 'https://registry.npmjs.org/' }}
 
       - name: Configure npm/proxy (optional)
@@ -42,7 +41,7 @@ jobs:
           npm config get registry
 
       - name: Install dependencies
-        run: npm ci
+        run: npm install
         env:
           # Optional: needed only when using a private npm registry/package
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
