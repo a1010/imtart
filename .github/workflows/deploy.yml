@@ -13,14 +13,39 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
+    # Optional: set these repository/organization Variables if your runner requires a proxy
+    # - NPM_REGISTRY_URL (e.g. https://registry.npmjs.org/)
+    # - NPM_PROXY_URL (e.g. http://proxy.example.com:8080)
+    env:
+      NPM_REGISTRY_URL: ${{ vars.NPM_REGISTRY_URL }}
+      NPM_PROXY_URL: ${{ vars.NPM_PROXY_URL }}
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
+          registry-url: ${{ vars.NPM_REGISTRY_URL != '' && vars.NPM_REGISTRY_URL || 'https://registry.npmjs.org/' }}
 
-      - run: npm install
+      - name: Configure npm/proxy (optional)
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -n "${NPM_REGISTRY_URL:-}" ]; then
+            npm config set registry "$NPM_REGISTRY_URL"
+          fi
+          if [ -n "${NPM_PROXY_URL:-}" ]; then
+            npm config set proxy "$NPM_PROXY_URL"
+            npm config set https-proxy "$NPM_PROXY_URL"
+          fi
+          npm config get registry
+
+      - name: Install dependencies
+        run: npm install
+        env:
+          # Optional: needed only when using a private npm registry/package
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
       - run: npm run build
 
       - uses: actions/upload-pages-artifact@v3
