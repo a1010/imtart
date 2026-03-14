@@ -106,6 +106,9 @@ const curlNoise = new THREE.Vector3()
 const neighborOffset = new THREE.Vector3()
 const avoidCube = new THREE.Vector3()
 const toCenter = new THREE.Vector3()
+const velocityDirection = new THREE.Vector3()
+const fishForwardAxis = new THREE.Vector3(1, 0, 0)
+const fishQuaternion = new THREE.Quaternion()
 
 const curlEps = 0.0001
 
@@ -237,7 +240,11 @@ function updateBoids() {
     boid.position.add(boid.velocity)
 
     boid.fish.position.copy(boid.position)
-    boid.fish.lookAt(boid.position.clone().add(boid.velocity))
+    if (boid.velocity.lengthSq() > 1e-8) {
+      velocityDirection.copy(boid.velocity).normalize()
+      fishQuaternion.setFromUnitVectors(fishForwardAxis, velocityDirection)
+      boid.fish.quaternion.copy(fishQuaternion)
+    }
   }
 }
 
