@@ -14,6 +14,45 @@ const renderer = new THREE.WebGLRenderer({ antialias: true })
 renderer.setSize(window.innerWidth, window.innerHeight)
 document.body.appendChild(renderer.domElement)
 
+const fishCountRange = { min: 10, max: 100 }
+let fishCount = 60
+
+const controls = document.createElement('div')
+controls.style.position = 'fixed'
+controls.style.top = '16px'
+controls.style.left = '16px'
+controls.style.padding = '10px 12px'
+controls.style.background = 'rgba(5, 11, 26, 0.65)'
+controls.style.border = '1px solid rgba(255, 255, 255, 0.2)'
+controls.style.borderRadius = '8px'
+controls.style.backdropFilter = 'blur(5px)'
+controls.style.color = '#ffffff'
+controls.style.fontFamily = 'sans-serif'
+controls.style.fontSize = '14px'
+controls.style.zIndex = '10'
+
+const countLabel = document.createElement('label')
+countLabel.textContent = 'Boids: '
+countLabel.htmlFor = 'boids-count-slider'
+
+const countValue = document.createElement('span')
+countValue.textContent = String(fishCount)
+countLabel.appendChild(countValue)
+
+const countSlider = document.createElement('input')
+countSlider.id = 'boids-count-slider'
+countSlider.type = 'range'
+countSlider.min = String(fishCountRange.min)
+countSlider.max = String(fishCountRange.max)
+countSlider.step = '1'
+countSlider.value = String(fishCount)
+countSlider.style.display = 'block'
+countSlider.style.marginTop = '8px'
+countSlider.style.width = '220px'
+
+controls.append(countLabel, countSlider)
+document.body.appendChild(controls)
+
 const ambientLight = new THREE.AmbientLight(0xffffff, 0.9)
 scene.add(ambientLight)
 
@@ -31,7 +70,6 @@ const material = new THREE.MeshStandardMaterial({
 const cube = new THREE.Mesh(geometry, material)
 scene.add(cube)
 
-const fishCount = 60
 const fishBounds = 8
 const cubeAvoidRadius = 2
 const maxSpeed = 0.055
@@ -67,8 +105,8 @@ const fishTail = new THREE.Mesh(
 fishTemplate.add(fishBody, fishTail)
 
 const fishBoids = []
-for (let i = 0; i < fishCount; i += 1) {
-  const hue = i / fishCount
+function createFish(index, totalCount) {
+  const hue = index / totalCount
   const color = new THREE.Color().setHSL(hue, 0.95, 0.58)
   const fish = fishTemplate.clone()
   fish.traverse((child) => {
@@ -93,8 +131,35 @@ for (let i = 0; i < fishCount; i += 1) {
 
   fish.position.copy(position)
   scene.add(fish)
-  fishBoids.push({ fish, position, velocity })
+  return { fish, position, velocity }
 }
+
+function setFishCount(nextCount) {
+  const clampedCount = THREE.MathUtils.clamp(
+    Math.round(nextCount),
+    fishCountRange.min,
+    fishCountRange.max
+  )
+
+  while (fishBoids.length < clampedCount) {
+    fishBoids.push(createFish(fishBoids.length, clampedCount))
+  }
+
+  while (fishBoids.length > clampedCount) {
+    const removedBoid = fishBoids.pop()
+    scene.remove(removedBoid.fish)
+  }
+
+  fishCount = clampedCount
+  countSlider.value = String(clampedCount)
+  countValue.textContent = String(clampedCount)
+}
+
+countSlider.addEventListener('input', () => {
+  setFishCount(Number.parseInt(countSlider.value, 10))
+})
+
+setFishCount(fishCount)
 
 const center = new THREE.Vector3(0, 0, 0)
 const separation = new THREE.Vector3()
