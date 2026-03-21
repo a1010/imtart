@@ -14,6 +14,20 @@ const renderer = new THREE.WebGLRenderer({ antialias: true })
 renderer.setSize(window.innerWidth, window.innerHeight)
 document.body.appendChild(renderer.domElement)
 
+
+const nav = document.createElement('div')
+nav.style.position = 'fixed'
+nav.style.top = '16px'
+nav.style.right = '16px'
+nav.style.padding = '8px 10px'
+nav.style.background = 'rgba(5, 11, 26, 0.65)'
+nav.style.border = '1px solid rgba(255, 255, 255, 0.2)'
+nav.style.borderRadius = '8px'
+nav.style.backdropFilter = 'blur(5px)'
+nav.style.zIndex = '10'
+nav.innerHTML = '<a href="/gpu.html" style="color:#9ed0ff;font-family:sans-serif;font-size:13px;">GPU 版を開く</a>'
+document.body.appendChild(nav)
+
 const fishCountRange = { min: 10, max: 100 }
 let fishCount = 60
 
@@ -104,6 +118,7 @@ const fishTail = new THREE.Mesh(
 )
 fishTemplate.add(fishBody, fishTail)
 
+// CPU 実装: boid の状態は JavaScript 配列で管理し、毎フレーム CPU で更新する。
 const fishBoids = []
 function createFish(index, totalCount) {
   const hue = index / totalCount
