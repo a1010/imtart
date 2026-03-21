@@ -5,6 +5,12 @@ export default defineConfig({
   base: '/',
   build: {
     outDir: '../dist',
-    emptyOutDir: true
-  }
+    emptyOutDir: true,
+    rollupOptions: {
+      input: {
+        cpu: 'src/index.html',
+        gpu: 'src/gpu.html',
+      },
+    },
+  },
 })
