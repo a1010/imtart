@@ -16,6 +16,7 @@ const renderer = new THREE.WebGLRenderer({ antialias: true })
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
 renderer.setSize(window.innerWidth, window.innerHeight)
 document.body.appendChild(renderer.domElement)
+const supportsVertexTextureFetch = renderer.capabilities.maxVertexTextures > 0
 
 const params = {
   textureSize: 64, // 64x64 = 4096 boids
@@ -289,63 +290,31 @@ if (error !== null) {
   throw new Error(error)
 }
 
-const references = new Float32Array(boidCount * 2)
-for (let i = 0; i < boidCount; i += 1) {
-  const x = (i % params.textureSize) / (params.textureSize - 1)
-  const y = Math.floor(i / params.textureSize) / (params.textureSize - 1)
-  references[i * 2 + 0] = x
-  references[i * 2 + 1] = y
-}
-
 const boidGeometry = new THREE.BufferGeometry()
-boidGeometry.setAttribute('position', new THREE.Float32BufferAttribute(new Float32Array(boidCount * 3), 3))
-boidGeometry.setAttribute('reference', new THREE.Float32BufferAttribute(references, 2))
+const boidPositions = new Float32Array(boidCount * 3)
+boidGeometry.setAttribute('position', new THREE.Float32BufferAttribute(boidPositions, 3))
 
-const boidMaterial = new THREE.ShaderMaterial({
-  uniforms: {
-    texturePosition: { value: null },
-    textureVelocity: { value: null },
-    pointSize: { value: 3.2 },
-  },
-  vertexShader: /* glsl */ `
-    uniform sampler2D texturePosition;
-    uniform sampler2D textureVelocity;
-    uniform float pointSize;
-    attribute vec2 reference;
-    varying float vSpeed;
-
-    void main() {
-      vec3 pos = texture2D(texturePosition, reference).xyz;
-      vec3 vel = texture2D(textureVelocity, reference).xyz;
-      vSpeed = length(vel);
-
-      vec4 mvPosition = modelViewMatrix * vec4(pos, 1.0);
-      gl_Position = projectionMatrix * mvPosition;
-      gl_PointSize = pointSize * (260.0 / -mvPosition.z);
-    }
-  `,
-  fragmentShader: /* glsl */ `
-    varying float vSpeed;
-
-    void main() {
-      vec2 p = gl_PointCoord - vec2(0.5);
-      float d = length(p);
-      if (d > 0.5) discard;
-
-      float t = clamp(vSpeed / 2.5, 0.0, 1.0);
-      vec3 slowColor = vec3(0.25, 0.55, 1.0);
-      vec3 fastColor = vec3(1.0, 0.45, 0.75);
-      vec3 c = mix(slowColor, fastColor, t);
-      gl_FragColor = vec4(c, 1.0 - smoothstep(0.32, 0.5, d));
-    }
-  `,
+const boidMaterial = new THREE.PointsMaterial({
+  size: 0.25,
   transparent: true,
-  depthWrite: false,
+  opacity: 0.9,
   blending: THREE.AdditiveBlending,
+  depthWrite: false,
+  color: 0x79b9ff,
 })
 
 const boidPoints = new THREE.Points(boidGeometry, boidMaterial)
 scene.add(boidPoints)
+const boidStateReadback = new Float32Array(boidCount * 4)
+const boidPositionAttribute = boidGeometry.getAttribute('position')
+
+if (!supportsVertexTextureFetch) {
+  const fallbackNote = document.createElement('div')
+  fallbackNote.style.marginTop = '6px'
+  fallbackNote.style.opacity = '0.9'
+  fallbackNote.textContent = '互換モード: GPU結果をCPUへ転送して描画中'
+  panel.appendChild(fallbackNote)
+}
 
 const centerGuide = new THREE.Mesh(
   new THREE.SphereGeometry(0.4, 20, 20),
@@ -366,9 +335,24 @@ function animate() {
   positionUniforms.delta.value = dt
 
   gpuCompute.compute()
+  const positionTarget = gpuCompute.getCurrentRenderTarget(positionVariable)
+  renderer.readRenderTargetPixels(
+    positionTarget,
+    0,
+    0,
+    params.textureSize,
+    params.textureSize,
+    boidStateReadback
+  )
 
-  boidMaterial.uniforms.texturePosition.value = gpuCompute.getCurrentRenderTarget(positionVariable).texture
-  boidMaterial.uniforms.textureVelocity.value = gpuCompute.getCurrentRenderTarget(velocityVariable).texture
+  for (let i = 0; i < boidCount; i += 1) {
+    const i3 = i * 3
+    const i4 = i * 4
+    boidPositions[i3 + 0] = boidStateReadback[i4 + 0]
+    boidPositions[i3 + 1] = boidStateReadback[i4 + 1]
+    boidPositions[i3 + 2] = boidStateReadback[i4 + 2]
+  }
+  boidPositionAttribute.needsUpdate = true
 
   centerGuide.rotation.y += dt * 0.8
   renderer.render(scene, camera)
