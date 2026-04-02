@@ -5,90 +5,115 @@ const scene = new THREE.Scene()
 scene.background = new THREE.Color(0x050b1a)
 
 const camera = new THREE.PerspectiveCamera(
-  70,
+  65,
   window.innerWidth / window.innerHeight,
   0.1,
-  1200
+  1000
 )
-camera.position.set(0, 3, 22)
+camera.position.set(0, 2, 28)
 
 const renderer = new THREE.WebGLRenderer({ antialias: true })
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
 renderer.setSize(window.innerWidth, window.innerHeight)
 document.body.appendChild(renderer.domElement)
-const supportsVertexTextureFetch = renderer.capabilities.maxVertexTextures > 0
 
 const params = {
-  textureSize: 64, // 64x64 = 4096 boids
-  fishBounds: 18,
-  maxSpeed: 2.6,
-  minSpeed: 0.35,
-  separationDistance: 1.1,
-  alignmentDistance: 2.4,
-  cohesionDistance: 2.8,
-  separationWeight: 1.4,
-  alignmentWeight: 0.55,
-  cohesionWeight: 0.4,
-  centerForce: 0.32,
-  SPIN_FORCE: 0.95,
-  CURL_FORCE: 0.6,
-  NOISE_SCALE: 0.16,
+  textureSize: 64,
+  worldRadius: 16,
+  minSpeed: 0.45,
+  maxSpeed: 2.4,
 }
 
 const boidCount = params.textureSize * params.textureSize
+const gpuCompute = new GPUComputationRenderer(params.textureSize, params.textureSize, renderer)
+
+const stageSettings = {
+  1: {
+    name: 'Step 1: 直進',
+    centerForce: 0.0,
+    spinForce: 0.0,
+    curlForce: 0.0,
+  },
+  2: {
+    name: 'Step 2: 中心へ収束',
+    centerForce: 0.2,
+    spinForce: 0.0,
+    curlForce: 0.0,
+  },
+  3: {
+    name: 'Step 3: 旋回 + ノイズ',
+    centerForce: 0.2,
+    spinForce: 0.65,
+    curlForce: 0.35,
+  },
+}
+
+const state = { step: 1 }
 
 const panel = document.createElement('div')
 panel.style.position = 'fixed'
 panel.style.top = '16px'
 panel.style.left = '16px'
-panel.style.padding = '10px 12px'
-panel.style.borderRadius = '8px'
+panel.style.padding = '12px'
+panel.style.borderRadius = '10px'
 panel.style.border = '1px solid rgba(255,255,255,0.2)'
-panel.style.background = 'rgba(5,11,26,0.7)'
-panel.style.backdropFilter = 'blur(5px)'
+panel.style.background = 'rgba(5,11,26,0.72)'
+panel.style.backdropFilter = 'blur(6px)'
+panel.style.fontFamily = 'sans-serif'
 panel.style.fontSize = '13px'
-panel.style.lineHeight = '1.4'
-panel.style.zIndex = '20'
-panel.innerHTML = [
-  '<div style="font-weight:700;margin-bottom:6px;">Boids (GPU)</div>',
-  `<div>Count: ${boidCount}</div>`,
-  `<div>SPIN_FORCE: ${params.SPIN_FORCE}</div>`,
-  `<div>CURL_FORCE: ${params.CURL_FORCE}</div>`,
-  `<div>NOISE_SCALE: ${params.NOISE_SCALE}</div>`,
-  '<div style="margin-top:8px;opacity:0.8;">CPU 版と同名パラメータを揃えています。</div>',
-  '<div style="margin-top:6px;"><a href="/" style="color:#9ed0ff;">CPU 版へ</a></div>',
-].join('')
+panel.style.lineHeight = '1.5'
+panel.style.color = '#fff'
+panel.style.zIndex = '10'
+
+const title = document.createElement('div')
+title.textContent = 'GPU Boids Playground'
+title.style.fontWeight = '700'
+title.style.marginBottom = '8px'
+
+const countInfo = document.createElement('div')
+countInfo.textContent = `Count: ${boidCount}`
+
+const stepInfo = document.createElement('div')
+stepInfo.style.margin = '6px 0 8px'
+
+const stepSlider = document.createElement('input')
+stepSlider.type = 'range'
+stepSlider.min = '1'
+stepSlider.max = '3'
+stepSlider.step = '1'
+stepSlider.value = '1'
+stepSlider.style.width = '220px'
+
+const hint = document.createElement('div')
+hint.textContent = 'スライダーで段階的に作り込みを確認'
+hint.style.marginTop = '6px'
+hint.style.opacity = '0.82'
+
+panel.append(title, countInfo, stepInfo, stepSlider, hint)
 document.body.appendChild(panel)
 
-// CPU 版との差分: boid 状態を JS 配列で保持せず、position/velocity テクスチャを GPU 上で更新する。
-const gpuCompute = new GPUComputationRenderer(params.textureSize, params.textureSize, renderer)
+function makeInitialTextures() {
+  const dtPosition = gpuCompute.createTexture()
+  const dtVelocity = gpuCompute.createTexture()
 
-const dtPosition = gpuCompute.createTexture()
-const dtVelocity = gpuCompute.createTexture()
-
-function fillTextures(positionTexture, velocityTexture) {
-  const pos = positionTexture.image.data
-  const vel = velocityTexture.image.data
-  const radius = params.fishBounds * 0.6
+  const pos = dtPosition.image.data
+  const vel = dtVelocity.image.data
 
   for (let i = 0; i < boidCount; i += 1) {
     const i4 = i * 4
-    const r = Math.cbrt(Math.random()) * radius
+
+    const r = Math.cbrt(Math.random()) * params.worldRadius * 0.7
     const theta = Math.random() * Math.PI * 2
     const phi = Math.acos(2 * Math.random() - 1)
 
-    const x = r * Math.sin(phi) * Math.cos(theta)
-    const y = r * Math.cos(phi)
-    const z = r * Math.sin(phi) * Math.sin(theta)
-
-    pos[i4 + 0] = x
-    pos[i4 + 1] = y
-    pos[i4 + 2] = z
+    pos[i4 + 0] = r * Math.sin(phi) * Math.cos(theta)
+    pos[i4 + 1] = r * Math.cos(phi)
+    pos[i4 + 2] = r * Math.sin(phi) * Math.sin(theta)
     pos[i4 + 3] = 1
 
-    const vx = (Math.random() - 0.5) * 2
-    const vy = (Math.random() - 0.5) * 2
-    const vz = (Math.random() - 0.5) * 2
+    const vx = Math.random() - 0.5
+    const vy = Math.random() - 0.5
+    const vz = Math.random() - 0.5
     const len = Math.hypot(vx, vy, vz) || 1
 
     vel[i4 + 0] = (vx / len) * params.minSpeed
@@ -96,69 +121,51 @@ function fillTextures(positionTexture, velocityTexture) {
     vel[i4 + 2] = (vz / len) * params.minSpeed
     vel[i4 + 3] = 1
   }
+
+  return { dtPosition, dtVelocity }
 }
 
-fillTextures(dtPosition, dtVelocity)
+const { dtPosition, dtVelocity } = makeInitialTextures()
 
 const velocityShader = /* glsl */ `
   uniform sampler2D texturePosition;
   uniform sampler2D textureVelocity;
   uniform float time;
   uniform float delta;
-  uniform float fishBounds;
-  uniform float maxSpeed;
+  uniform float worldRadius;
   uniform float minSpeed;
-
-  uniform float separationDistance;
-  uniform float alignmentDistance;
-  uniform float cohesionDistance;
-
-  uniform float separationWeight;
-  uniform float alignmentWeight;
-  uniform float cohesionWeight;
-
+  uniform float maxSpeed;
   uniform float centerForce;
-  uniform float SPIN_FORCE;
-  uniform float CURL_FORCE;
-  uniform float NOISE_SCALE;
+  uniform float spinForce;
+  uniform float curlForce;
 
-  const float PI = 3.14159265359;
-  const int SAMPLE_COUNT = 24;
-
-  float hash1(vec2 p) {
+  float hash(vec2 p) {
     return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
   }
 
-  vec2 hash2(vec2 p) {
-    return vec2(
-      hash1(p + 17.13),
-      hash1(p + 37.17)
-    );
-  }
-
-  float smoothNoise(vec2 p) {
+  float noise(vec2 p) {
     vec2 i = floor(p);
     vec2 f = fract(p);
     f = f * f * (3.0 - 2.0 * f);
 
-    float a = hash1(i + vec2(0.0, 0.0));
-    float b = hash1(i + vec2(1.0, 0.0));
-    float c = hash1(i + vec2(0.0, 1.0));
-    float d = hash1(i + vec2(1.0, 1.0));
+    float a = hash(i + vec2(0.0, 0.0));
+    float b = hash(i + vec2(1.0, 0.0));
+    float c = hash(i + vec2(0.0, 1.0));
+    float d = hash(i + vec2(1.0, 1.0));
 
     return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
   }
 
-  vec3 sampleCurlNoise(vec3 p) {
-    float eps = 0.01;
-    vec2 uv = p.xz * NOISE_SCALE;
+  vec3 curl2d(vec3 p) {
+    float eps = 0.02;
+    vec2 uv = p.xz * 0.13 + vec2(time * 0.08, 0.0);
 
-    float n1 = smoothNoise(uv + vec2(0.0, eps));
-    float n2 = smoothNoise(uv - vec2(0.0, eps));
+    float n1 = noise(uv + vec2(0.0, eps));
+    float n2 = noise(uv - vec2(0.0, eps));
     float a = (n1 - n2) / (2.0 * eps);
 
-    float n3 = smoothNoise(uv + vec2(eps, 0.0));
-    float n4 = smoothNoise(uv - vec2(eps, 0.0));
+    float n3 = noise(uv + vec2(eps, 0.0));
+    float n4 = noise(uv - vec2(eps, 0.0));
     float b = (n3 - n4) / (2.0 * eps);
 
     return vec3(a, 0.0, -b);
@@ -166,80 +173,35 @@ const velocityShader = /* glsl */ `
 
   void main() {
     vec2 uv = gl_FragCoord.xy / resolution.xy;
-    vec3 selfPosition = texture2D(texturePosition, uv).xyz;
-    vec3 selfVelocity = texture2D(textureVelocity, uv).xyz;
+    vec3 pos = texture2D(texturePosition, uv).xyz;
+    vec3 vel = texture2D(textureVelocity, uv).xyz;
 
-    vec3 separation = vec3(0.0);
-    vec3 alignment = vec3(0.0);
-    vec3 cohesion = vec3(0.0);
+    vec3 toCenter = -pos;
+    vec3 accel = vec3(0.0);
 
-    float separationNeighbors = 0.0;
-    float groupNeighbors = 0.0;
+    accel += toCenter * centerForce;
 
-    for (int i = 0; i < SAMPLE_COUNT; i++) {
-      float fi = float(i);
-      vec2 sampleUv = hash2(uv + vec2(fi * 0.123, fi * 0.371 + time * 0.02));
-      vec3 p = texture2D(texturePosition, sampleUv).xyz;
-      vec3 v = texture2D(textureVelocity, sampleUv).xyz;
-
-      vec3 diff = selfPosition - p;
-      float d = length(diff);
-
-      if (d > 0.0001 && d < separationDistance) {
-        separation += normalize(diff) / (d + 0.08);
-        separationNeighbors += 1.0;
-      }
-
-      if (d > 0.0001 && d < alignmentDistance) {
-        alignment += v;
-        groupNeighbors += 1.0;
-      }
-
-      if (d > 0.0001 && d < cohesionDistance) {
-        cohesion += p;
-      }
+    vec3 spin = vec3(-toCenter.z, 0.0, toCenter.x);
+    if (length(spin) > 0.0001) {
+      accel += normalize(spin) * spinForce;
     }
 
-    if (separationNeighbors > 0.0) {
-      separation /= separationNeighbors;
+    accel += curl2d(pos) * curlForce;
+
+    if (length(pos) > worldRadius * 0.92) {
+      accel += normalize(-pos) * 1.4;
     }
 
-    if (groupNeighbors > 0.0) {
-      alignment = (alignment / groupNeighbors) - selfVelocity;
-      cohesion = (cohesion / groupNeighbors) - selfPosition;
-    }
+    vel += accel * delta * 8.0;
 
-    vec3 centerVec = -selfPosition;
-    vec3 centerConstraint = centerVec * centerForce;
-
-    vec3 spin = vec3(-centerVec.z, 0.0, centerVec.x);
-    if (length(spin) > 1e-5) {
-      spin = normalize(spin) * SPIN_FORCE;
-    }
-
-    vec3 curlNoise = sampleCurlNoise(selfPosition + vec3(time * 0.2, 0.0, 0.0)) * CURL_FORCE;
-
-    vec3 nextVelocity = selfVelocity;
-    nextVelocity += separation * separationWeight;
-    nextVelocity += alignment * alignmentWeight;
-    nextVelocity += cohesion * cohesionWeight;
-    nextVelocity += centerConstraint;
-    nextVelocity += spin;
-    nextVelocity += curlNoise;
-
-    float dist = length(selfPosition);
-    if (dist > fishBounds * 0.85) {
-      nextVelocity += normalize(-selfPosition) * 1.1;
-    }
-
-    float speed = length(nextVelocity);
+    float speed = length(vel);
     if (speed > maxSpeed) {
-      nextVelocity = normalize(nextVelocity) * maxSpeed;
+      vel = normalize(vel) * maxSpeed;
     } else if (speed < minSpeed) {
-      nextVelocity = normalize(nextVelocity + vec3(0.0001, 0.0, 0.0)) * minSpeed;
+      vel = normalize(vel + vec3(0.0001, 0.0, 0.0)) * minSpeed;
     }
 
-    gl_FragColor = vec4(nextVelocity, 1.0);
+    gl_FragColor = vec4(vel, 1.0);
   }
 `
 
@@ -250,117 +212,114 @@ const positionShader = /* glsl */ `
 
   void main() {
     vec2 uv = gl_FragCoord.xy / resolution.xy;
-    vec3 position = texture2D(texturePosition, uv).xyz;
-    vec3 velocity = texture2D(textureVelocity, uv).xyz;
+    vec3 pos = texture2D(texturePosition, uv).xyz;
+    vec3 vel = texture2D(textureVelocity, uv).xyz;
 
-    position += velocity * delta;
+    pos += vel * delta;
 
-    gl_FragColor = vec4(position, 1.0);
+    gl_FragColor = vec4(pos, 1.0);
   }
 `
 
 const velocityVariable = gpuCompute.addVariable('textureVelocity', velocityShader, dtVelocity)
 const positionVariable = gpuCompute.addVariable('texturePosition', positionShader, dtPosition)
 
-gpuCompute.setVariableDependencies(velocityVariable, [positionVariable, velocityVariable])
-gpuCompute.setVariableDependencies(positionVariable, [positionVariable, velocityVariable])
+gpuCompute.setVariableDependencies(velocityVariable, [velocityVariable, positionVariable])
+gpuCompute.setVariableDependencies(positionVariable, [velocityVariable, positionVariable])
 
 const velocityUniforms = velocityVariable.material.uniforms
 velocityUniforms.time = { value: 0 }
 velocityUniforms.delta = { value: 0.016 }
-velocityUniforms.fishBounds = { value: params.fishBounds }
-velocityUniforms.maxSpeed = { value: params.maxSpeed }
+velocityUniforms.worldRadius = { value: params.worldRadius }
 velocityUniforms.minSpeed = { value: params.minSpeed }
-velocityUniforms.separationDistance = { value: params.separationDistance }
-velocityUniforms.alignmentDistance = { value: params.alignmentDistance }
-velocityUniforms.cohesionDistance = { value: params.cohesionDistance }
-velocityUniforms.separationWeight = { value: params.separationWeight }
-velocityUniforms.alignmentWeight = { value: params.alignmentWeight }
-velocityUniforms.cohesionWeight = { value: params.cohesionWeight }
-velocityUniforms.centerForce = { value: params.centerForce }
-velocityUniforms.SPIN_FORCE = { value: params.SPIN_FORCE }
-velocityUniforms.CURL_FORCE = { value: params.CURL_FORCE }
-velocityUniforms.NOISE_SCALE = { value: params.NOISE_SCALE }
+velocityUniforms.maxSpeed = { value: params.maxSpeed }
+velocityUniforms.centerForce = { value: stageSettings[1].centerForce }
+velocityUniforms.spinForce = { value: stageSettings[1].spinForce }
+velocityUniforms.curlForce = { value: stageSettings[1].curlForce }
 
 const positionUniforms = positionVariable.material.uniforms
 positionUniforms.delta = { value: 0.016 }
 
-const error = gpuCompute.init()
-if (error !== null) {
-  throw new Error(error)
+const initError = gpuCompute.init()
+if (initError !== null) {
+  throw new Error(initError)
 }
 
 const boidGeometry = new THREE.BufferGeometry()
-const boidPositions = new Float32Array(boidCount * 3)
-const boidUvs = new Float32Array(boidCount * 2)
+const pointPositions = new Float32Array(boidCount * 3)
+const pointUvs = new Float32Array(boidCount * 2)
+
 for (let i = 0; i < boidCount; i += 1) {
   const x = i % params.textureSize
   const y = Math.floor(i / params.textureSize)
   const i2 = i * 2
-  boidUvs[i2 + 0] = (x + 0.5) / params.textureSize
-  boidUvs[i2 + 1] = (y + 0.5) / params.textureSize
-}
-boidGeometry.setAttribute('position', new THREE.Float32BufferAttribute(boidPositions, 3))
-boidGeometry.setAttribute('boidUv', new THREE.Float32BufferAttribute(boidUvs, 2))
-
-const boidMaterial = supportsVertexTextureFetch
-  ? new THREE.ShaderMaterial({
-      uniforms: {
-        texturePosition: { value: null },
-        pointSize: { value: 4.0 * renderer.getPixelRatio() },
-      },
-      transparent: true,
-      blending: THREE.AdditiveBlending,
-      depthWrite: false,
-      vertexShader: /* glsl */ `
-        attribute vec2 boidUv;
-        uniform sampler2D texturePosition;
-        uniform float pointSize;
-
-        void main() {
-          vec3 pos = texture2D(texturePosition, boidUv).xyz;
-          vec4 mvPosition = modelViewMatrix * vec4(pos, 1.0);
-          gl_PointSize = pointSize;
-          gl_Position = projectionMatrix * mvPosition;
-        }
-      `,
-      fragmentShader: /* glsl */ `
-        void main() {
-          vec2 p = gl_PointCoord - vec2(0.5);
-          if (dot(p, p) > 0.25) {
-            discard;
-          }
-          gl_FragColor = vec4(0.474, 0.725, 1.0, 0.9);
-        }
-      `,
-    })
-  : new THREE.PointsMaterial({
-      size: 0.25,
-      transparent: true,
-      opacity: 0.9,
-      blending: THREE.AdditiveBlending,
-      depthWrite: false,
-      color: 0x79b9ff,
-    })
-
-const boidPoints = new THREE.Points(boidGeometry, boidMaterial)
-scene.add(boidPoints)
-const boidStateReadback = new Float32Array(boidCount * 4)
-const boidPositionAttribute = boidGeometry.getAttribute('position')
-
-if (!supportsVertexTextureFetch) {
-  const fallbackNote = document.createElement('div')
-  fallbackNote.style.marginTop = '6px'
-  fallbackNote.style.opacity = '0.9'
-  fallbackNote.textContent = '互換モード: GPU結果をCPUへ転送して描画中'
-  panel.appendChild(fallbackNote)
+  pointUvs[i2 + 0] = (x + 0.5) / params.textureSize
+  pointUvs[i2 + 1] = (y + 0.5) / params.textureSize
 }
 
-const centerGuide = new THREE.Mesh(
-  new THREE.SphereGeometry(0.4, 20, 20),
-  new THREE.MeshBasicMaterial({ color: 0x89a9ff, transparent: true, opacity: 0.55 })
+boidGeometry.setAttribute('position', new THREE.Float32BufferAttribute(pointPositions, 3))
+boidGeometry.setAttribute('boidUv', new THREE.Float32BufferAttribute(pointUvs, 2))
+
+const boidMaterial = new THREE.ShaderMaterial({
+  uniforms: {
+    texturePosition: { value: null },
+    pointSize: { value: 3.5 * renderer.getPixelRatio() },
+  },
+  transparent: true,
+  blending: THREE.AdditiveBlending,
+  depthWrite: false,
+  vertexShader: /* glsl */ `
+    attribute vec2 boidUv;
+    uniform sampler2D texturePosition;
+    uniform float pointSize;
+
+    void main() {
+      vec3 pos = texture2D(texturePosition, boidUv).xyz;
+      vec4 mv = modelViewMatrix * vec4(pos, 1.0);
+      gl_PointSize = pointSize;
+      gl_Position = projectionMatrix * mv;
+    }
+  `,
+  fragmentShader: /* glsl */ `
+    void main() {
+      vec2 p = gl_PointCoord - vec2(0.5);
+      float r2 = dot(p, p);
+      if (r2 > 0.25) {
+        discard;
+      }
+      float alpha = smoothstep(0.25, 0.0, r2);
+      gl_FragColor = vec4(0.50, 0.76, 1.0, alpha * 0.95);
+    }
+  `,
+})
+
+const boids = new THREE.Points(boidGeometry, boidMaterial)
+scene.add(boids)
+
+const worldGuide = new THREE.Mesh(
+  new THREE.SphereGeometry(params.worldRadius, 28, 18),
+  new THREE.MeshBasicMaterial({
+    color: 0x6f8dff,
+    wireframe: true,
+    transparent: true,
+    opacity: 0.12,
+  })
 )
-scene.add(centerGuide)
+scene.add(worldGuide)
+
+function applyStep(step) {
+  const next = stageSettings[step]
+  state.step = step
+  stepInfo.textContent = next.name
+  velocityUniforms.centerForce.value = next.centerForce
+  velocityUniforms.spinForce.value = next.spinForce
+  velocityUniforms.curlForce.value = next.curlForce
+}
+
+stepSlider.addEventListener('input', () => {
+  applyStep(Number.parseInt(stepSlider.value, 10))
+})
+applyStep(1)
 
 const clock = new THREE.Clock()
 
@@ -368,39 +327,15 @@ function animate() {
   requestAnimationFrame(animate)
 
   const dt = Math.min(clock.getDelta(), 0.033)
-  const elapsed = clock.elapsedTime
-
-  velocityUniforms.time.value = elapsed
+  velocityUniforms.time.value = clock.elapsedTime
   velocityUniforms.delta.value = dt
   positionUniforms.delta.value = dt
 
   gpuCompute.compute()
+  boidMaterial.uniforms.texturePosition.value =
+    gpuCompute.getCurrentRenderTarget(positionVariable).texture
 
-  const positionTexture = gpuCompute.getCurrentRenderTarget(positionVariable).texture
-  if (supportsVertexTextureFetch) {
-    boidMaterial.uniforms.texturePosition.value = positionTexture
-  } else {
-    const positionTarget = gpuCompute.getCurrentRenderTarget(positionVariable)
-    renderer.readRenderTargetPixels(
-      positionTarget,
-      0,
-      0,
-      params.textureSize,
-      params.textureSize,
-      boidStateReadback
-    )
-
-    for (let i = 0; i < boidCount; i += 1) {
-      const i3 = i * 3
-      const i4 = i * 4
-      boidPositions[i3 + 0] = boidStateReadback[i4 + 0]
-      boidPositions[i3 + 1] = boidStateReadback[i4 + 1]
-      boidPositions[i3 + 2] = boidStateReadback[i4 + 2]
-    }
-    boidPositionAttribute.needsUpdate = true
-  }
-
-  centerGuide.rotation.y += dt * 0.8
+  worldGuide.rotation.y += dt * 0.15
   renderer.render(scene, camera)
 }
 
