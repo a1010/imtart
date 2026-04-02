@@ -292,16 +292,56 @@ if (error !== null) {
 
 const boidGeometry = new THREE.BufferGeometry()
 const boidPositions = new Float32Array(boidCount * 3)
+const boidUvs = new Float32Array(boidCount * 2)
+for (let i = 0; i < boidCount; i += 1) {
+  const x = i % params.textureSize
+  const y = Math.floor(i / params.textureSize)
+  const i2 = i * 2
+  boidUvs[i2 + 0] = (x + 0.5) / params.textureSize
+  boidUvs[i2 + 1] = (y + 0.5) / params.textureSize
+}
 boidGeometry.setAttribute('position', new THREE.Float32BufferAttribute(boidPositions, 3))
+boidGeometry.setAttribute('boidUv', new THREE.Float32BufferAttribute(boidUvs, 2))
 
-const boidMaterial = new THREE.PointsMaterial({
-  size: 0.25,
-  transparent: true,
-  opacity: 0.9,
-  blending: THREE.AdditiveBlending,
-  depthWrite: false,
-  color: 0x79b9ff,
-})
+const boidMaterial = supportsVertexTextureFetch
+  ? new THREE.ShaderMaterial({
+      uniforms: {
+        texturePosition: { value: null },
+        pointSize: { value: 4.0 * renderer.getPixelRatio() },
+      },
+      transparent: true,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+      vertexShader: /* glsl */ `
+        attribute vec2 boidUv;
+        uniform sampler2D texturePosition;
+        uniform float pointSize;
+
+        void main() {
+          vec3 pos = texture2D(texturePosition, boidUv).xyz;
+          vec4 mvPosition = modelViewMatrix * vec4(pos, 1.0);
+          gl_PointSize = pointSize;
+          gl_Position = projectionMatrix * mvPosition;
+        }
+      `,
+      fragmentShader: /* glsl */ `
+        void main() {
+          vec2 p = gl_PointCoord - vec2(0.5);
+          if (dot(p, p) > 0.25) {
+            discard;
+          }
+          gl_FragColor = vec4(0.474, 0.725, 1.0, 0.9);
+        }
+      `,
+    })
+  : new THREE.PointsMaterial({
+      size: 0.25,
+      transparent: true,
+      opacity: 0.9,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+      color: 0x79b9ff,
+    })
 
 const boidPoints = new THREE.Points(boidGeometry, boidMaterial)
 scene.add(boidPoints)
@@ -335,24 +375,30 @@ function animate() {
   positionUniforms.delta.value = dt
 
   gpuCompute.compute()
-  const positionTarget = gpuCompute.getCurrentRenderTarget(positionVariable)
-  renderer.readRenderTargetPixels(
-    positionTarget,
-    0,
-    0,
-    params.textureSize,
-    params.textureSize,
-    boidStateReadback
-  )
 
-  for (let i = 0; i < boidCount; i += 1) {
-    const i3 = i * 3
-    const i4 = i * 4
-    boidPositions[i3 + 0] = boidStateReadback[i4 + 0]
-    boidPositions[i3 + 1] = boidStateReadback[i4 + 1]
-    boidPositions[i3 + 2] = boidStateReadback[i4 + 2]
+  const positionTexture = gpuCompute.getCurrentRenderTarget(positionVariable).texture
+  if (supportsVertexTextureFetch) {
+    boidMaterial.uniforms.texturePosition.value = positionTexture
+  } else {
+    const positionTarget = gpuCompute.getCurrentRenderTarget(positionVariable)
+    renderer.readRenderTargetPixels(
+      positionTarget,
+      0,
+      0,
+      params.textureSize,
+      params.textureSize,
+      boidStateReadback
+    )
+
+    for (let i = 0; i < boidCount; i += 1) {
+      const i3 = i * 3
+      const i4 = i * 4
+      boidPositions[i3 + 0] = boidStateReadback[i4 + 0]
+      boidPositions[i3 + 1] = boidStateReadback[i4 + 1]
+      boidPositions[i3 + 2] = boidStateReadback[i4 + 2]
+    }
+    boidPositionAttribute.needsUpdate = true
   }
-  boidPositionAttribute.needsUpdate = true
 
   centerGuide.rotation.y += dt * 0.8
   renderer.render(scene, camera)
