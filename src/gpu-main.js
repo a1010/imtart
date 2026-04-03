@@ -18,7 +18,7 @@ renderer.setSize(window.innerWidth, window.innerHeight)
 document.body.appendChild(renderer.domElement)
 
 const status = document.createElement('div')
-status.textContent = 'step 2'
+status.textContent = 'step 3'
 status.style.position = 'fixed'
 status.style.top = '12px'
 status.style.left = '12px'
@@ -34,14 +34,26 @@ document.body.appendChild(status)
 
 const agentGeometry = new THREE.BoxGeometry(0.2, 0.2, 0.2)
 const agentMaterial = new THREE.MeshBasicMaterial({ color: 0x87c6ff })
-const agent = new THREE.Mesh(agentGeometry, agentMaterial)
-agent.position.set(0, 0, 0)
-scene.add(agent)
+const agents = []
+const agentCount = 10
+const spacing = 0.5
+const startX = -((agentCount - 1) * spacing) / 2
+
+for (let i = 0; i < agentCount; i += 1) {
+  const agent = new THREE.Mesh(agentGeometry, agentMaterial)
+  agent.position.set(startX + i * spacing, 0, 0)
+  scene.add(agent)
+  agents.push(agent)
+}
 
 function animate() {
   requestAnimationFrame(animate)
   const t = performance.now() * 0.001
-  agent.position.x = Math.sin(t * 0.7) * 1.2
+  const offsetX = Math.sin(t * 0.7) * 1.2
+  for (let i = 0; i < agents.length; i += 1) {
+    const agent = agents[i]
+    agent.position.x = startX + i * spacing + offsetX
+  }
   renderer.render(scene, camera)
 }
 
