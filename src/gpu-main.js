@@ -18,7 +18,7 @@ renderer.setSize(window.innerWidth, window.innerHeight)
 document.body.appendChild(renderer.domElement)
 
 const status = document.createElement('div')
-status.textContent = 'step 4'
+status.textContent = 'step 5'
 status.style.position = 'fixed'
 status.style.top = '12px'
 status.style.left = '12px'
