@@ -18,7 +18,7 @@ renderer.setSize(window.innerWidth, window.innerHeight)
 document.body.appendChild(renderer.domElement)
 
 const status = document.createElement('div')
-status.textContent = 'step 1'
+status.textContent = 'step 2'
 status.style.position = 'fixed'
 status.style.top = '12px'
 status.style.left = '12px'
@@ -38,11 +38,17 @@ const agent = new THREE.Mesh(agentGeometry, agentMaterial)
 agent.position.set(0, 0, 0)
 scene.add(agent)
 
-renderer.render(scene, camera)
+function animate() {
+  requestAnimationFrame(animate)
+  const t = performance.now() * 0.001
+  agent.position.x = Math.sin(t * 0.7) * 1.2
+  renderer.render(scene, camera)
+}
 
 window.addEventListener('resize', () => {
   camera.aspect = window.innerWidth / window.innerHeight
   camera.updateProjectionMatrix()
   renderer.setSize(window.innerWidth, window.innerHeight)
-  renderer.render(scene, camera)
 })
+
+animate()
