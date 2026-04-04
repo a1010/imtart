@@ -46,7 +46,7 @@ controls.style.fontSize = '14px'
 controls.style.zIndex = '10'
 
 const stepLabel = document.createElement('div')
-stepLabel.textContent = 'step 5'
+stepLabel.textContent = 'step 6'
 stepLabel.style.marginBottom = '8px'
 stepLabel.style.fontWeight = '600'
 stepLabel.style.letterSpacing = '0.03em'
@@ -92,6 +92,7 @@ scene.add(cube)
 
 const fishBounds = 8
 const maxSpeed = 0.055
+const centerAttractionStrength = 0.0006
 
 const fishGeometry = new THREE.ConeGeometry(0.08, 0.28, 10)
 fishGeometry.rotateZ(-Math.PI / 2)
@@ -179,6 +180,7 @@ setFishCount(fishCount)
 const velocityDirection = new THREE.Vector3()
 const fishForwardAxis = new THREE.Vector3(1, 0, 0)
 const fishQuaternion = new THREE.Quaternion()
+const centerAttraction = new THREE.Vector3()
 
 camera.position.set(0, 2, 9)
 camera.lookAt(0, 0, 0)
@@ -186,6 +188,8 @@ camera.lookAt(0, 0, 0)
 function updateBoids() {
   for (let i = 0; i < fishBoids.length; i += 1) {
     const boid = fishBoids[i]
+    centerAttraction.copy(boid.position).multiplyScalar(-centerAttractionStrength)
+    boid.velocity.add(centerAttraction)
     boid.position.add(boid.velocity)
     boid.velocity.clampLength(0.012, maxSpeed)
 
