@@ -18,7 +18,7 @@ renderer.setSize(window.innerWidth, window.innerHeight)
 document.body.appendChild(renderer.domElement)
 
 const status = document.createElement('div')
-status.textContent = 'step 5'
+status.textContent = 'step 6'
 status.style.position = 'fixed'
 status.style.top = '12px'
 status.style.left = '12px'
@@ -36,30 +36,52 @@ const agentGeometry = new THREE.BoxGeometry(0.2, 0.2, 0.2)
 const agentMaterial = new THREE.MeshBasicMaterial({ color: 0x87c6ff })
 const agents = []
 const agentCount = 10
-const spacing = 0.5
-const startX = -((agentCount - 1) * spacing) / 2
-const baseAmplitude = 1.2
-const baseSpeed = 0.7
+const bounds = 3.6
+const maxSpeed = 0.04
+const minSpeed = 0.01
+const centerAttractionStrength = 0.00055
 
 for (let i = 0; i < agentCount; i += 1) {
   const agent = new THREE.Mesh(agentGeometry, agentMaterial)
-  agent.position.set(startX + i * spacing, 0, 0)
-  agent.userData.phase = i * 0.35
-  agent.userData.speed = baseSpeed + i * 0.03
-  agent.userData.amplitude = baseAmplitude + i * 0.03
+  agent.position.set(
+    (Math.random() - 0.5) * bounds * 1.2,
+    (Math.random() - 0.5) * bounds * 1.2,
+    (Math.random() - 0.5) * bounds * 1.2
+  )
+  agent.userData.velocity = new THREE.Vector3(
+    (Math.random() - 0.5) * maxSpeed,
+    (Math.random() - 0.5) * maxSpeed,
+    (Math.random() - 0.5) * maxSpeed
+  )
   scene.add(agent)
   agents.push(agent)
 }
 
+const centerForce = new THREE.Vector3()
+
 function animate() {
   requestAnimationFrame(animate)
-  const t = performance.now() * 0.001
   for (let i = 0; i < agents.length; i += 1) {
     const agent = agents[i]
-    const offsetX =
-      Math.sin(t * agent.userData.speed + agent.userData.phase) *
-      agent.userData.amplitude
-    agent.position.x = startX + i * spacing + offsetX
+    const velocity = agent.userData.velocity
+
+    centerForce.copy(agent.position).multiplyScalar(-centerAttractionStrength)
+    velocity.add(centerForce)
+    velocity.clampLength(minSpeed, maxSpeed)
+    agent.position.add(velocity)
+
+    if (Math.abs(agent.position.x) > bounds) {
+      agent.position.x = THREE.MathUtils.clamp(agent.position.x, -bounds, bounds)
+      velocity.x *= -1
+    }
+    if (Math.abs(agent.position.y) > bounds) {
+      agent.position.y = THREE.MathUtils.clamp(agent.position.y, -bounds, bounds)
+      velocity.y *= -1
+    }
+    if (Math.abs(agent.position.z) > bounds) {
+      agent.position.z = THREE.MathUtils.clamp(agent.position.z, -bounds, bounds)
+      velocity.z *= -1
+    }
   }
   renderer.render(scene, camera)
 }
