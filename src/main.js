@@ -92,6 +92,7 @@ scene.add(cube)
 
 const fishBounds = 8
 const maxSpeed = 0.055
+// Step 6: 中心から離れるほど弱く中心方向へ戻る力
 const centerAttractionStrength = 0.0006
 
 const fishGeometry = new THREE.ConeGeometry(0.08, 0.28, 10)
