@@ -18,7 +18,7 @@ renderer.setSize(window.innerWidth, window.innerHeight)
 document.body.appendChild(renderer.domElement)
 
 const status = document.createElement('div')
-status.textContent = 'step 8'
+status.textContent = 'step 9'
 status.style.position = 'fixed'
 status.style.top = '12px'
 status.style.left = '12px'
@@ -44,8 +44,11 @@ const alignmentNeighborRadius = 1.4
 const alignmentStrength = 0.02
 const cohesionNeighborRadius = alignmentNeighborRadius
 const cohesionStrength = 0.0035
+const separationDistance = 0.75
+const separationStrength = 0.012
 const alignmentNeighborRadiusSq = alignmentNeighborRadius ** 2
 const cohesionNeighborRadiusSq = cohesionNeighborRadius ** 2
+const separationDistanceSq = separationDistance ** 2
 
 for (let i = 0; i < agentCount; i += 1) {
   const agent = new THREE.Mesh(agentGeometry, agentMaterial)
@@ -68,6 +71,9 @@ const alignmentAverageVelocity = new THREE.Vector3()
 const alignmentAdjustment = new THREE.Vector3()
 const cohesionAveragePosition = new THREE.Vector3()
 const cohesionAdjustment = new THREE.Vector3()
+const separationAverageDirection = new THREE.Vector3()
+const separationOffset = new THREE.Vector3()
+const separationAdjustment = new THREE.Vector3()
 
 function animate() {
   requestAnimationFrame(animate)
@@ -77,8 +83,10 @@ function animate() {
 
     alignmentAverageVelocity.set(0, 0, 0)
     cohesionAveragePosition.set(0, 0, 0)
+    separationAverageDirection.set(0, 0, 0)
     let alignmentNeighborCount = 0
     let cohesionNeighborCount = 0
+    let separationNeighborCount = 0
     for (let j = 0; j < agents.length; j += 1) {
       if (i === j) continue
       const neighbor = agents[j]
@@ -92,6 +100,14 @@ function animate() {
       if (distanceSq <= cohesionNeighborRadiusSq) {
         cohesionAveragePosition.add(neighbor.position)
         cohesionNeighborCount += 1
+      }
+
+      if (distanceSq <= separationDistanceSq && distanceSq > 1e-8) {
+        separationOffset.copy(agent.position).sub(neighbor.position)
+        separationAverageDirection.add(
+          separationOffset.multiplyScalar(1 / Math.sqrt(distanceSq))
+        )
+        separationNeighborCount += 1
       }
     }
     if (alignmentNeighborCount > 0) {
@@ -110,6 +126,14 @@ function animate() {
         .sub(agent.position)
         .multiplyScalar(cohesionStrength)
       velocity.add(cohesionAdjustment)
+    }
+
+    if (separationNeighborCount > 0) {
+      separationAverageDirection.multiplyScalar(1 / separationNeighborCount)
+      separationAdjustment
+        .copy(separationAverageDirection)
+        .multiplyScalar(separationStrength)
+      velocity.add(separationAdjustment)
     }
 
     centerForce.copy(agent.position).multiplyScalar(-centerAttractionStrength)

@@ -46,7 +46,7 @@ controls.style.fontSize = '14px'
 controls.style.zIndex = '10'
 
 const stepLabel = document.createElement('div')
-stepLabel.textContent = 'step 8'
+stepLabel.textContent = 'step 9'
 stepLabel.style.marginBottom = '8px'
 stepLabel.style.fontWeight = '600'
 stepLabel.style.letterSpacing = '0.03em'
@@ -98,8 +98,11 @@ const alignmentNeighborRadius = 1.8
 const alignmentStrength = 0.018
 const cohesionNeighborRadius = alignmentNeighborRadius
 const cohesionStrength = 0.0035
+const separationDistance = 0.95
+const separationStrength = 0.01
 const alignmentNeighborRadiusSq = alignmentNeighborRadius ** 2
 const cohesionNeighborRadiusSq = cohesionNeighborRadius ** 2
+const separationDistanceSq = separationDistance ** 2
 
 const fishGeometry = new THREE.ConeGeometry(0.08, 0.28, 10)
 fishGeometry.rotateZ(-Math.PI / 2)
@@ -192,6 +195,9 @@ const alignmentAverageVelocity = new THREE.Vector3()
 const alignmentAdjustment = new THREE.Vector3()
 const cohesionAveragePosition = new THREE.Vector3()
 const cohesionAdjustment = new THREE.Vector3()
+const separationAverageDirection = new THREE.Vector3()
+const separationOffset = new THREE.Vector3()
+const separationAdjustment = new THREE.Vector3()
 
 camera.position.set(0, 2, 9)
 camera.lookAt(0, 0, 0)
@@ -202,8 +208,10 @@ function updateBoids() {
 
     alignmentAverageVelocity.set(0, 0, 0)
     cohesionAveragePosition.set(0, 0, 0)
+    separationAverageDirection.set(0, 0, 0)
     let alignmentNeighborCount = 0
     let cohesionNeighborCount = 0
+    let separationNeighborCount = 0
     for (let j = 0; j < fishBoids.length; j += 1) {
       if (i === j) continue
       const neighbor = fishBoids[j]
@@ -217,6 +225,14 @@ function updateBoids() {
       if (distanceSq <= cohesionNeighborRadiusSq) {
         cohesionAveragePosition.add(neighbor.position)
         cohesionNeighborCount += 1
+      }
+
+      if (distanceSq <= separationDistanceSq && distanceSq > 1e-8) {
+        separationOffset.copy(boid.position).sub(neighbor.position)
+        separationAverageDirection.add(
+          separationOffset.multiplyScalar(1 / Math.sqrt(distanceSq))
+        )
+        separationNeighborCount += 1
       }
     }
     if (alignmentNeighborCount > 0) {
@@ -235,6 +251,14 @@ function updateBoids() {
         .sub(boid.position)
         .multiplyScalar(cohesionStrength)
       boid.velocity.add(cohesionAdjustment)
+    }
+
+    if (separationNeighborCount > 0) {
+      separationAverageDirection.multiplyScalar(1 / separationNeighborCount)
+      separationAdjustment
+        .copy(separationAverageDirection)
+        .multiplyScalar(separationStrength)
+      boid.velocity.add(separationAdjustment)
     }
 
     centerAttraction.copy(boid.position).multiplyScalar(-centerAttractionStrength)
