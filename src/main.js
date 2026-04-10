@@ -46,7 +46,7 @@ controls.style.fontSize = '14px'
 controls.style.zIndex = '10'
 
 const stepLabel = document.createElement('div')
-stepLabel.textContent = 'step 6'
+stepLabel.textContent = 'step 7'
 stepLabel.style.marginBottom = '8px'
 stepLabel.style.fontWeight = '600'
 stepLabel.style.letterSpacing = '0.03em'
@@ -94,6 +94,9 @@ const fishBounds = 8
 const maxSpeed = 0.055
 // Step 6: 中心から離れるほど弱く中心方向へ戻る力
 const centerAttractionStrength = 0.0006
+const alignmentNeighborRadius = 1.8
+const alignmentStrength = 0.018
+const alignmentNeighborRadiusSq = alignmentNeighborRadius ** 2
 
 const fishGeometry = new THREE.ConeGeometry(0.08, 0.28, 10)
 fishGeometry.rotateZ(-Math.PI / 2)
@@ -182,6 +185,8 @@ const velocityDirection = new THREE.Vector3()
 const fishForwardAxis = new THREE.Vector3(1, 0, 0)
 const fishQuaternion = new THREE.Quaternion()
 const centerAttraction = new THREE.Vector3()
+const alignmentAverageVelocity = new THREE.Vector3()
+const alignmentAdjustment = new THREE.Vector3()
 
 camera.position.set(0, 2, 9)
 camera.lookAt(0, 0, 0)
@@ -189,6 +194,25 @@ camera.lookAt(0, 0, 0)
 function updateBoids() {
   for (let i = 0; i < fishBoids.length; i += 1) {
     const boid = fishBoids[i]
+
+    alignmentAverageVelocity.set(0, 0, 0)
+    let neighborCount = 0
+    for (let j = 0; j < fishBoids.length; j += 1) {
+      if (i === j) continue
+      const neighbor = fishBoids[j]
+      if (boid.position.distanceToSquared(neighbor.position) > alignmentNeighborRadiusSq) continue
+      alignmentAverageVelocity.add(neighbor.velocity)
+      neighborCount += 1
+    }
+    if (neighborCount > 0) {
+      alignmentAverageVelocity.multiplyScalar(1 / neighborCount)
+      alignmentAdjustment
+        .copy(alignmentAverageVelocity)
+        .sub(boid.velocity)
+        .multiplyScalar(alignmentStrength)
+      boid.velocity.add(alignmentAdjustment)
+    }
+
     centerAttraction.copy(boid.position).multiplyScalar(-centerAttractionStrength)
     boid.velocity.add(centerAttraction)
     boid.position.add(boid.velocity)

@@ -18,7 +18,7 @@ renderer.setSize(window.innerWidth, window.innerHeight)
 document.body.appendChild(renderer.domElement)
 
 const status = document.createElement('div')
-status.textContent = 'step 6'
+status.textContent = 'step 7'
 status.style.position = 'fixed'
 status.style.top = '12px'
 status.style.left = '12px'
@@ -40,6 +40,9 @@ const bounds = 3.6
 const maxSpeed = 0.04
 const minSpeed = 0.01
 const centerAttractionStrength = 0.00055
+const alignmentNeighborRadius = 1.4
+const alignmentStrength = 0.02
+const alignmentNeighborRadiusSq = alignmentNeighborRadius ** 2
 
 for (let i = 0; i < agentCount; i += 1) {
   const agent = new THREE.Mesh(agentGeometry, agentMaterial)
@@ -58,12 +61,32 @@ for (let i = 0; i < agentCount; i += 1) {
 }
 
 const centerForce = new THREE.Vector3()
+const alignmentAverageVelocity = new THREE.Vector3()
+const alignmentAdjustment = new THREE.Vector3()
 
 function animate() {
   requestAnimationFrame(animate)
   for (let i = 0; i < agents.length; i += 1) {
     const agent = agents[i]
     const velocity = agent.userData.velocity
+
+    alignmentAverageVelocity.set(0, 0, 0)
+    let neighborCount = 0
+    for (let j = 0; j < agents.length; j += 1) {
+      if (i === j) continue
+      const neighbor = agents[j]
+      if (agent.position.distanceToSquared(neighbor.position) > alignmentNeighborRadiusSq) continue
+      alignmentAverageVelocity.add(neighbor.userData.velocity)
+      neighborCount += 1
+    }
+    if (neighborCount > 0) {
+      alignmentAverageVelocity.multiplyScalar(1 / neighborCount)
+      alignmentAdjustment
+        .copy(alignmentAverageVelocity)
+        .sub(velocity)
+        .multiplyScalar(alignmentStrength)
+      velocity.add(alignmentAdjustment)
+    }
 
     centerForce.copy(agent.position).multiplyScalar(-centerAttractionStrength)
     velocity.add(centerForce)
