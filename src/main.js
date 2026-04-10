@@ -46,7 +46,7 @@ controls.style.fontSize = '14px'
 controls.style.zIndex = '10'
 
 const stepLabel = document.createElement('div')
-stepLabel.textContent = 'step 7'
+stepLabel.textContent = 'step 8'
 stepLabel.style.marginBottom = '8px'
 stepLabel.style.fontWeight = '600'
 stepLabel.style.letterSpacing = '0.03em'
@@ -96,7 +96,10 @@ const maxSpeed = 0.055
 const centerAttractionStrength = 0.0006
 const alignmentNeighborRadius = 1.8
 const alignmentStrength = 0.018
+const cohesionNeighborRadius = alignmentNeighborRadius
+const cohesionStrength = 0.0035
 const alignmentNeighborRadiusSq = alignmentNeighborRadius ** 2
+const cohesionNeighborRadiusSq = cohesionNeighborRadius ** 2
 
 const fishGeometry = new THREE.ConeGeometry(0.08, 0.28, 10)
 fishGeometry.rotateZ(-Math.PI / 2)
@@ -187,6 +190,8 @@ const fishQuaternion = new THREE.Quaternion()
 const centerAttraction = new THREE.Vector3()
 const alignmentAverageVelocity = new THREE.Vector3()
 const alignmentAdjustment = new THREE.Vector3()
+const cohesionAveragePosition = new THREE.Vector3()
+const cohesionAdjustment = new THREE.Vector3()
 
 camera.position.set(0, 2, 9)
 camera.lookAt(0, 0, 0)
@@ -196,21 +201,40 @@ function updateBoids() {
     const boid = fishBoids[i]
 
     alignmentAverageVelocity.set(0, 0, 0)
-    let neighborCount = 0
+    cohesionAveragePosition.set(0, 0, 0)
+    let alignmentNeighborCount = 0
+    let cohesionNeighborCount = 0
     for (let j = 0; j < fishBoids.length; j += 1) {
       if (i === j) continue
       const neighbor = fishBoids[j]
-      if (boid.position.distanceToSquared(neighbor.position) > alignmentNeighborRadiusSq) continue
-      alignmentAverageVelocity.add(neighbor.velocity)
-      neighborCount += 1
+      const distanceSq = boid.position.distanceToSquared(neighbor.position)
+
+      if (distanceSq <= alignmentNeighborRadiusSq) {
+        alignmentAverageVelocity.add(neighbor.velocity)
+        alignmentNeighborCount += 1
+      }
+
+      if (distanceSq <= cohesionNeighborRadiusSq) {
+        cohesionAveragePosition.add(neighbor.position)
+        cohesionNeighborCount += 1
+      }
     }
-    if (neighborCount > 0) {
-      alignmentAverageVelocity.multiplyScalar(1 / neighborCount)
+    if (alignmentNeighborCount > 0) {
+      alignmentAverageVelocity.multiplyScalar(1 / alignmentNeighborCount)
       alignmentAdjustment
         .copy(alignmentAverageVelocity)
         .sub(boid.velocity)
         .multiplyScalar(alignmentStrength)
       boid.velocity.add(alignmentAdjustment)
+    }
+
+    if (cohesionNeighborCount > 0) {
+      cohesionAveragePosition.multiplyScalar(1 / cohesionNeighborCount)
+      cohesionAdjustment
+        .copy(cohesionAveragePosition)
+        .sub(boid.position)
+        .multiplyScalar(cohesionStrength)
+      boid.velocity.add(cohesionAdjustment)
     }
 
     centerAttraction.copy(boid.position).multiplyScalar(-centerAttractionStrength)
