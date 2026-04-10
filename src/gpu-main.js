@@ -18,7 +18,7 @@ renderer.setSize(window.innerWidth, window.innerHeight)
 document.body.appendChild(renderer.domElement)
 
 const status = document.createElement('div')
-status.textContent = 'step 7'
+status.textContent = 'step 8'
 status.style.position = 'fixed'
 status.style.top = '12px'
 status.style.left = '12px'
@@ -42,7 +42,10 @@ const minSpeed = 0.01
 const centerAttractionStrength = 0.00055
 const alignmentNeighborRadius = 1.4
 const alignmentStrength = 0.02
+const cohesionNeighborRadius = alignmentNeighborRadius
+const cohesionStrength = 0.0035
 const alignmentNeighborRadiusSq = alignmentNeighborRadius ** 2
+const cohesionNeighborRadiusSq = cohesionNeighborRadius ** 2
 
 for (let i = 0; i < agentCount; i += 1) {
   const agent = new THREE.Mesh(agentGeometry, agentMaterial)
@@ -63,6 +66,8 @@ for (let i = 0; i < agentCount; i += 1) {
 const centerForce = new THREE.Vector3()
 const alignmentAverageVelocity = new THREE.Vector3()
 const alignmentAdjustment = new THREE.Vector3()
+const cohesionAveragePosition = new THREE.Vector3()
+const cohesionAdjustment = new THREE.Vector3()
 
 function animate() {
   requestAnimationFrame(animate)
@@ -71,21 +76,40 @@ function animate() {
     const velocity = agent.userData.velocity
 
     alignmentAverageVelocity.set(0, 0, 0)
-    let neighborCount = 0
+    cohesionAveragePosition.set(0, 0, 0)
+    let alignmentNeighborCount = 0
+    let cohesionNeighborCount = 0
     for (let j = 0; j < agents.length; j += 1) {
       if (i === j) continue
       const neighbor = agents[j]
-      if (agent.position.distanceToSquared(neighbor.position) > alignmentNeighborRadiusSq) continue
-      alignmentAverageVelocity.add(neighbor.userData.velocity)
-      neighborCount += 1
+      const distanceSq = agent.position.distanceToSquared(neighbor.position)
+
+      if (distanceSq <= alignmentNeighborRadiusSq) {
+        alignmentAverageVelocity.add(neighbor.userData.velocity)
+        alignmentNeighborCount += 1
+      }
+
+      if (distanceSq <= cohesionNeighborRadiusSq) {
+        cohesionAveragePosition.add(neighbor.position)
+        cohesionNeighborCount += 1
+      }
     }
-    if (neighborCount > 0) {
-      alignmentAverageVelocity.multiplyScalar(1 / neighborCount)
+    if (alignmentNeighborCount > 0) {
+      alignmentAverageVelocity.multiplyScalar(1 / alignmentNeighborCount)
       alignmentAdjustment
         .copy(alignmentAverageVelocity)
         .sub(velocity)
         .multiplyScalar(alignmentStrength)
       velocity.add(alignmentAdjustment)
+    }
+
+    if (cohesionNeighborCount > 0) {
+      cohesionAveragePosition.multiplyScalar(1 / cohesionNeighborCount)
+      cohesionAdjustment
+        .copy(cohesionAveragePosition)
+        .sub(agent.position)
+        .multiplyScalar(cohesionStrength)
+      velocity.add(cohesionAdjustment)
     }
 
     centerForce.copy(agent.position).multiplyScalar(-centerAttractionStrength)
