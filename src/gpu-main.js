@@ -32,8 +32,22 @@ status.style.color = '#fff'
 status.style.zIndex = '10'
 document.body.appendChild(status)
 
-const agentGeometry = new THREE.BoxGeometry(0.2, 0.2, 0.2)
-const agentMaterial = new THREE.MeshBasicMaterial({ color: 0x87c6ff })
+const agentBodyGeometry = new THREE.ConeGeometry(0.08, 0.28, 10)
+agentBodyGeometry.rotateZ(-Math.PI / 2)
+const agentTailGeometry = new THREE.ConeGeometry(0.06, 0.18, 6)
+agentTailGeometry.rotateZ(Math.PI / 2)
+agentTailGeometry.translate(-0.18, 0, 0)
+
+const agentTemplate = new THREE.Group()
+const agentBody = new THREE.Mesh(
+  agentBodyGeometry,
+  new THREE.MeshBasicMaterial({ color: 0x87c6ff })
+)
+const agentTail = new THREE.Mesh(
+  agentTailGeometry,
+  new THREE.MeshBasicMaterial({ color: 0x87c6ff })
+)
+agentTemplate.add(agentBody, agentTail)
 const agents = []
 const agentCount = 10
 const bounds = 3.6
@@ -51,7 +65,7 @@ const cohesionNeighborRadiusSq = cohesionNeighborRadius ** 2
 const separationDistanceSq = separationDistance ** 2
 
 for (let i = 0; i < agentCount; i += 1) {
-  const agent = new THREE.Mesh(agentGeometry, agentMaterial)
+  const agent = agentTemplate.clone()
   agent.position.set(
     (Math.random() - 0.5) * bounds * 1.2,
     (Math.random() - 0.5) * bounds * 1.2,
@@ -74,6 +88,9 @@ const cohesionAdjustment = new THREE.Vector3()
 const separationAverageDirection = new THREE.Vector3()
 const separationOffset = new THREE.Vector3()
 const separationAdjustment = new THREE.Vector3()
+const velocityDirection = new THREE.Vector3()
+const agentForwardAxis = new THREE.Vector3(1, 0, 0)
+const agentQuaternion = new THREE.Quaternion()
 
 function animate() {
   requestAnimationFrame(animate)
@@ -152,6 +169,12 @@ function animate() {
     if (Math.abs(agent.position.z) > bounds) {
       agent.position.z = THREE.MathUtils.clamp(agent.position.z, -bounds, bounds)
       velocity.z *= -1
+    }
+
+    if (velocity.lengthSq() > 1e-8) {
+      velocityDirection.copy(velocity).normalize()
+      agentQuaternion.setFromUnitVectors(agentForwardAxis, velocityDirection)
+      agent.quaternion.copy(agentQuaternion)
     }
   }
   renderer.render(scene, camera)
