@@ -17,20 +17,50 @@ renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
 renderer.setSize(window.innerWidth, window.innerHeight)
 document.body.appendChild(renderer.domElement)
 
-const status = document.createElement('div')
-status.textContent = 'step 9'
-status.style.position = 'fixed'
-status.style.top = '12px'
-status.style.left = '12px'
-status.style.padding = '8px 10px'
-status.style.border = '1px solid rgba(255,255,255,0.25)'
-status.style.borderRadius = '8px'
-status.style.background = 'rgba(5,11,26,0.72)'
-status.style.fontFamily = 'sans-serif'
-status.style.fontSize = '14px'
-status.style.color = '#fff'
-status.style.zIndex = '10'
-document.body.appendChild(status)
+const agentCountRange = { min: 10, max: 100 }
+let agentCount = 10
+
+const controls = document.createElement('div')
+controls.style.position = 'fixed'
+controls.style.top = '16px'
+controls.style.left = '16px'
+controls.style.padding = '10px 12px'
+controls.style.background = 'rgba(5, 11, 26, 0.65)'
+controls.style.border = '1px solid rgba(255, 255, 255, 0.2)'
+controls.style.borderRadius = '8px'
+controls.style.backdropFilter = 'blur(5px)'
+controls.style.color = '#ffffff'
+controls.style.fontFamily = 'sans-serif'
+controls.style.fontSize = '14px'
+controls.style.zIndex = '10'
+
+const stepLabel = document.createElement('div')
+stepLabel.textContent = 'step 9'
+stepLabel.style.marginBottom = '8px'
+stepLabel.style.fontWeight = '600'
+stepLabel.style.letterSpacing = '0.03em'
+
+const countLabel = document.createElement('label')
+countLabel.textContent = 'Boids: '
+countLabel.htmlFor = 'boids-count-slider'
+
+const countValue = document.createElement('span')
+countValue.textContent = String(agentCount)
+countLabel.appendChild(countValue)
+
+const countSlider = document.createElement('input')
+countSlider.id = 'boids-count-slider'
+countSlider.type = 'range'
+countSlider.min = String(agentCountRange.min)
+countSlider.max = String(agentCountRange.max)
+countSlider.step = '1'
+countSlider.value = String(agentCount)
+countSlider.style.display = 'block'
+countSlider.style.marginTop = '8px'
+countSlider.style.width = '220px'
+
+controls.append(stepLabel, countLabel, countSlider)
+document.body.appendChild(controls)
 
 const agentBodyGeometry = new THREE.ConeGeometry(0.08, 0.28, 10)
 agentBodyGeometry.rotateZ(-Math.PI / 2)
@@ -49,7 +79,6 @@ const agentTail = new THREE.Mesh(
 )
 agentTemplate.add(agentBody, agentTail)
 const agents = []
-const agentCount = 10
 const bounds = 3.6
 const maxSpeed = 0.04
 const minSpeed = 0.01
@@ -64,7 +93,7 @@ const alignmentNeighborRadiusSq = alignmentNeighborRadius ** 2
 const cohesionNeighborRadiusSq = cohesionNeighborRadius ** 2
 const separationDistanceSq = separationDistance ** 2
 
-for (let i = 0; i < agentCount; i += 1) {
+function createAgent() {
   const agent = agentTemplate.clone()
   agent.position.set(
     (Math.random() - 0.5) * bounds * 1.2,
@@ -77,8 +106,35 @@ for (let i = 0; i < agentCount; i += 1) {
     (Math.random() - 0.5) * maxSpeed
   )
   scene.add(agent)
-  agents.push(agent)
+  return agent
 }
+
+function setAgentCount(nextCount) {
+  const clampedCount = THREE.MathUtils.clamp(
+    Math.round(nextCount),
+    agentCountRange.min,
+    agentCountRange.max
+  )
+
+  while (agents.length < clampedCount) {
+    agents.push(createAgent())
+  }
+
+  while (agents.length > clampedCount) {
+    const removedAgent = agents.pop()
+    scene.remove(removedAgent)
+  }
+
+  agentCount = clampedCount
+  countSlider.value = String(clampedCount)
+  countValue.textContent = String(clampedCount)
+}
+
+countSlider.addEventListener('input', () => {
+  setAgentCount(Number.parseInt(countSlider.value, 10))
+})
+
+setAgentCount(agentCount)
 
 const centerForce = new THREE.Vector3()
 const alignmentAverageVelocity = new THREE.Vector3()
